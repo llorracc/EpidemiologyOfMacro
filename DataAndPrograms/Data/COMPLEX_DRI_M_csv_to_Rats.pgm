@@ -1,0 +1,1 @@
+dedit(new) complex_dri_m.ratopen data complex_dri_m.csvstore(convert=prn,org=obs)saveclose data

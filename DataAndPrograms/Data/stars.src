@@ -1,0 +1,29 @@
+PROCEDURE stars normstat
+
+TYPE REAL     normstat
+
+* LOCAL STRING     starstring
+LOCAL REAL       onestar twostar
+
+compute onestar  = 0.10
+compute twostar  = 0.05
+compute threestar= 0.01
+
+compute starstring = ''
+
+if (normstat.le.onestar)
+  compute starstring = '^{*'
+
+if (normstat.le.twostar)
+  compute starstring = starstring+'*'
+  
+if (normstat.le.threestar)
+  compute starstring = starstring+'*'
+ 
+if (normstat.le.onestar)
+  compute starstring = starstring+'}'
+  
+end stars
+
+
+ 

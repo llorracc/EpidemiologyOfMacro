@@ -1,0 +1,843 @@
+*******************************************************************************
+*
+*  URADF series start end  
+* 
+*   Parameters:
+*     series     The series to be analyzed
+*     start end  The ranger of the series to use: defaults 
+*                to the entire range
+*
+*   Options
+*     DET       = NONE/[CONSTANT]/TREND 
+*                      Note: TREND includes a constant term, too.
+*     CRITERION = AIC/[BIC]/LBTEST/LMTEST/REDUCTION 
+*     MAXLAG    = [20] The maximum lag considered in the AIC, BIC 
+*                 and general to simple formulations
+*     SIGNIF    = [0.05] The significance level for the Ljung-Box 
+*                 and LM tests, and general to simple (reduction) algorithm.
+*     SCLAGS    = [12]  The number of lags to use in the 
+*                 Ljung-Box and LM tests
+*
+*
+*  ADF computes the Augmented Dickey-Fuller unit root "t-tests". 
+*   For these tests, one adds lagged difference of the series until
+*   the residuals of the regression:
+*
+*        dely(t) = rho*y(t-1) + b1*dely(t-1) + ... + bp*dely(t-p) + e(t)
+*
+*   are white noise.  This is a NECESSARY condition for the tests to be
+*   valid.  
+*     
+*   ADF determines the appropriate number of lagged differences by any
+*   of five methods: (1) AIC criterion, (2) BIC criterion (the default), (3) by  
+*   adding lags until the Ljung-Box test fails to reject no serial correlation 
+*   at a user defined level, (4) by adding lags until a  Lagrange Multiplier test 
+*   fails to reject no serial correlation at a user defined level, or (5) by 
+*   starting with some maximum number of lagged differences and if the last lagged
+*   difference is significant, choose that lag length, if not, reduce the order
+*   by one until the last included lag is significant or none are 
+*   included (general to simple).          
+*       
+*   In general, the BIC, Ljung-Box tests, and LM tests pick out the same optimal
+*   lag length for the ADF regression (plus or minus one).  The AIC and the
+*   general to simple selection methods will generally pick out the same
+*   lag length (plus or minus one), which will always be at least
+*   as large as the lag length BIC,LB,LM tests.  The BIC,LB,LM give a
+*   more parsimonious lag structure.               
+*     
+*   Critical values are displayed for the 1%, 5%, and 10% level and depend on
+*   the sample size (25,50,100,250,500,asymptotic).  The critical values are 
+*   from Hamilton (1994).  
+*
+*   References:
+*   ** Fuller, _Introduction to Statistical Time Series_, New York, Wiley, 1976.
+*   ** Dickey and Fuller, "Distribution of the Estimators for Time Series
+*         Regressions with a Unit Root", J.A.S.A., 1979, pp 427-431.
+*   ** Davidson and MacKinnon, _Estimation and Inference in Econometrics_,  
+*         London, Oxford University Press, 1993.
+*   ** Goerlich, Paco:  Various unit root test procedures from 
+*         the Estimat BBS.
+*   ** Hamilton, _Time Series Analysis_, Princeton, 1994.
+*
+*   Revision Schedule:
+*      DFUNIT.SRC Written November, 1989 by Tom Doan
+*      Updated January, 1992 to Version 4.0 by Estima
+*      DFUNIT.src -> ADF.SRC by Norman Morin, February/March,1994
+*      ADF.SRC -> UR.ADF by Norman Morin, August,1994
+*
+*      Thanks to Clive Granger and Scott Spear at UCSD, and the tech-gurus
+*      at Estima for helpful comments.  Thanks, too, to Paco Goerlich for
+*      well-written unit root procedures, from which I got many ideas for 
+*      this revision.
+*
+*
+******************************************************************************** 
+
+********************************************************************************
+****  Performs the Ljung-Box Tests
+PROCEDURE LB series start end  
+
+TYPE SERIES      series  
+TYPE INTEGER     start end
+
+OPTIONS INTEGER  LAGS   24
+OPTIONS INTEGER  DFC     0
+
+LOCAL INTEGER    startl endl spanl count nobs num 
+LOCAL SERIES     corr corr2 csum TREND
+
+INQUIRE(series=series) startl>>start endl>>end
+COMPUTE nobs = endl - startl + 1
+
+IF (dfc.ge.lags)
+	COMPUTE num = fix(1.5*dfc)
+ELSE
+	COMPUTE num = lags
+
+CORRELATE(noprint,number=num) series startl endl corr
+
+SET TREND = t
+SET corr2 1 num+1 = corr**2/(nobs-trend)
+SET csum 1 num = 0
+
+ACCUMULATE corr2 2 num+1 csum 1
+ 
+COMPUTE LBSTAT = nobs*(nobs+2)*csum(num)
+COMPUTE LBSIGNIF = %CHISQR(LBSTAT,num-dfc)
+ 
+DISP '   Ljung-Box test for residual serial correlation of order ' $
+			   @-1 num  
+DISP '      Test Statistic:' ##.##### LBSTAT '  Significance Level:' $
+			   #.##### LBSIGNIF
+
+END
+*******************************************************************************
+
+*******************************************************************************
+****  Performs the Lagrange Multiplier tests
+PROCEDURE SCTEST depvar start end  
+
+TYPE SERIES      depvar
+TYPE INTEGER     start end
+
+OPTION INTEGER   lags     4 
+OPTION SWITCH    print    0
+
+LOCAL SERIES     resids
+LOCAL INDEX      reglist
+LOCAL INTEGER    startl endl
+
+ENTER(varying) reglist
+INQUIRE(regressorlist)  startl>>start  endl>>end
+#depvar reglist 
+
+LINREG(print=print) depvar startl endl resids
+#reglist
+
+LINREG(noprint,dfc=%nreg) resids startl+lags endl
+#reglist resids{1 to lags}
+
+IF (%RSQUARED.lt.0) {
+COMPUTE %TRSQ = 0., SCSIGNIF = 1. 
+DISPLAY '   Lagrange multiplier test for residual serial correlation of order ' $
+				  @-1 Lags  
+DISPLAY '      Test Statistic:' ##.##### %TRSQ '  Significance Level:' $
+				  #.#####  SCSIGNIF 
+}
+
+ELSE { 
+COMPUTE SCSIGNIF=%CHISQR(%TRSQ,LAGS)
+DISPLAY '   Lagrange multiplier test for residual serial correlation of order ' $
+				 @-1 Lags 
+DISPLAY '      Test Statistic:' ##.##### %TRSQ '  Significance Level:' $
+				  #.##### SCSIGNIF 
+}
+
+END 
+********************************************************************************
+
+********************************************************************************
+****  Finds the minimum AIC and BIC 
+PROCEDURE SELECTUNI series start end  
+
+TYPE     series       series
+OPTION   integer      number  20
+OPTION   choice       det      2    none constant trend
+
+LOCAL INTEGER maxlag lagnum
+LOCAL SERIES aic bic series trend delseries
+LOCAL REAL aico bico
+
+INQUIRE(series=series) startl>>start endl>>end
+COMPUTE  nobs = endl-startl+1
+
+SET delseries startl endl = series - series{1}
+
+COMPUTE maxlag = number
+
+IF (det.eq.1)
+	 {
+	 CMOM 
+	 #delseries{1 to maxlag} series{0 to 1}
+
+	 SET aic 1 maxlag  = 0.
+	 SET bic 1 maxlag = 0.
+
+	 LINREG(cmom,noprint) series
+	 #series{1} 
+
+	 COMPUTE aico = log(%rss/%nobs) + 2.*%nreg/%nobs
+	 COMPUTE bico = log(%rss/%nobs) + (1.*%nreg/%nobs)*log(%nobs)
+
+	 DO lagnum = 1,maxlag
+		  LINREG(cmom,noprint) series  
+		  #series{1} delseries{1 to lagnum}
+		  COMPUTE aic(lagnum) = log(%rss/%nobs) + 2.*%nreg/%nobs
+		  COMPUTE bic(lagnum) = log(%rss/%nobs) + (1.*%nreg/%nobs)*log(%nobs)
+	 END DO 
+	 }
+
+ELSE IF (det.eq.2)
+	 {
+	 CMOM 
+	 #constant delseries{1 to maxlag} series{0 to 1}
+
+	 SET aic 1 maxlag  = 0.
+	 SET bic 1 maxlag  = 0.
+
+	 LINREG(noprint,cmom) series
+	 #constant series{1} 
+
+	 COMPUTE aico = log(%rss/%nobs) + 2.*%nreg/%nobs
+	 COMPUTE bico = log(%rss/%nobs) + (1.*%nreg/%nobs)*log(%nobs)
+
+	 DO lagnum = 1,maxlag
+		LINREG(cmom,noprint) series  
+		#constant series{1} delseries{1 to lagnum}
+		COMPUTE aic(lagnum) = log(%rss/%nobs) + 2.*%nreg/%nobs
+		COMPUTE bic(lagnum) = log(%rss/%nobs) + (1.*%nreg/%nobs)*log(%nobs)
+	 END DO 
+	 }
+
+ELSE 
+	 {
+	SET TREND = T
+	 CMOM 
+	 #constant trend delseries{1 to maxlag} series{0 to 1}
+
+	 SET aic 1 maxlag  = 0.
+	 SET bic 1 maxlag  = 0.
+
+	 LINREG(noprint,cmom) series
+	 #constant trend series{1} 
+
+	 COMPUTE aico = log(%rss/%nobs) + 2.*%nreg/%nobs
+	 COMPUTE bico = log(%rss/%nobs) + (1.*%nreg/%nobs)*log(%nobs)
+
+	 DO lagnum = 1,maxlag
+		LINREG(cmom,noprint) series  
+		#constant trend series{1} delseries{1 to lagnum}
+		COMPUTE aic(lagnum) = log(%rss/%nobs) + 2.*%nreg/%nobs
+		COMPUTE bic(lagnum) = log(%rss/%nobs) + (1.*%nreg/%nobs)*log(%nobs)
+	 END DO 
+	 }
+ 
+DISPLAY 'Model Selection Criteria' 
+
+EXTREMEUM(noprint)  aic 1 maxlag
+IF (%MINIMUM.lt.aico) {
+	 DISPLAY '   Minimum AIC at lag:' @26 ## %MINENT
+	 COMPUTE aicmin = %MINENT
+	 }
+ELSE {
+	 DISPLAY '   Minimum AIC at lag:' @27 '0'
+	 COMPUTE aicmin = 0
+	 }
+
+EXTREMEUM(noprint) bic 1 maxlag
+IF (%MINIMUM.lt.bico) {
+	 DISPLAY '   Minimum BIC at lag:' @26 ## %MINENT
+	 COMPUTE bicmin = %MINENT
+	 }
+ELSE {
+	 DISPLAY '   Minimum BIC at lag:' @27 '0'
+	 COMPUTE bicmin = 0
+	 } 
+
+END SELECTUNI
+***************************************************************************** 
+
+*****************************************************************************
+****  Stores the critical values for the ADF test
+PROCEDURE CV  
+
+OPTION CHOICE DET 2 NONE CONSTANT TREND
+OPTION CHOICE TEST 1 TTEST ZTEST FCONST FTREND
+OPTION INTEGER numobs 0
+
+LOCAL INTEGER obs
+
+IF (numobs.le.1)
+	COMPUTE obs = 1000
+ELSE
+	COMPUTE obs = numobs
+
+disp '*' @17 '1%' @27 '5%' @37 '10%' @63 '*'
+
+IF (test.eq.1) {  ******  T-TEST
+
+IF (det.eq.1) {
+   IF (obs.lt.25)
+	 disp  '*' @15 '-2.66' @25 '-1.95' @36 '-1.60' @63 '*'
+   ELSE IF (obs.lt.50)
+	 disp  '*' @15 '-2.62' @25 '-1.95' @36 '-1.61' @63 '*'
+   ELSE IF (obs.lt.100)
+	 disp  '*' @15 '-2.60' @25 '-1.95' @36 '-1.61' @63 '*'      
+   ELSE IF (obs.lt.250)
+	 disp  '*' @15 '-2.58' @25 '-1.95' @36 '-1.62' @63 '*' 
+   ELSE IF (obs.le.500)
+	 disp  '*' @15 '-2.58' @25 '-1.95' @36 '-1.62' @63 '*' 
+   ELSE IF (obs.gt.500)
+	 disp  '*' @15 '-2.58' @25 '-1.95' @36 '-1.62' @63 '*'
+   }
+ELSE IF (det.eq.2) {
+   IF (obs.lt.25)
+	 disp  '*' @15 '-3.75' @25 '-3.00' @36 '-2.63' @63 '*' 
+   ELSE IF (obs.lt.50)
+	 disp  '*' @15 '-3.58' @25 '-2.93' @36 '-2.60' @63 '*'
+   ELSE IF (obs.lt.100)
+	 disp  '*' @15 '-3.51' @25 '-2.89' @36 '-2.58' @63 '*'      
+   ELSE IF (obs.lt.250)
+	 disp  '*' @15 '-3.46' @25 '-2.88' @36 '-2.57' @63 '*' 
+   ELSE IF (obs.le.500)
+	 disp  '*' @15 '-3.44' @25 '-2.87' @36 '-2.57' @63 '*' 
+   ELSE IF (obs.gt.500)
+	 disp  '*' @15 '-3.43' @25 '-2.86' @36 '-2.57' @63 '*'
+   }
+ELSE IF (det.eq.3)  {
+   IF (obs.lt.25)
+	 disp  '*' @15 '-4.38' @25 '-3.60' @36 '-3.24' @63 '*' 
+   ELSE IF (obs.lt.50)
+	 disp  '*' @15 '-4.15' @25 '-3.50' @36 '-3.18' @63 '*'
+   ELSE IF (obs.lt.100)
+	 disp  '*' @15 '-4.04' @25 '-3.45' @36 '-3.15' @63 '*'      
+   ELSE IF (obs.lt.250)
+	 disp  '*' @15 '-3.99' @25 '-3.43' @36 '-3.13' @63 '*' 
+   ELSE IF (obs.le.500)
+	 disp  '*' @15 '-3.98' @25 '-3.42' @36 '-3.13' @63 '*'
+   ELSE IF (obs.gt.500)
+	 disp  '*' @15 '-3.96' @25 '-3.41' @36 '-3.12' @63 '*'
+   }
+
+}
+
+IF (test.eq.2) {         *******  Z-TEST
+
+IF (det.eq.1) {
+   IF (obs.lt.25)
+	 disp  '*' @14 '-11.9' @25 '-7.3' @36 '-5.3' @63 '*'
+   ELSE IF (obs.lt.50)
+	 disp  '*' @14 '-12.9' @25 '-7.7' @36 '-5.5' @63 '*'
+   ELSE IF (obs.lt.100)
+	 disp  '*' @14 '-13.3' @25 '-7.9' @36 '-5.6' @63 '*'      
+   ELSE IF (obs.lt.250)
+	 disp  '*' @14 '-13.6' @25 '-8.0' @36 '-5.7' @63 '*'
+   ELSE IF (obs.le.500)
+	 disp  '*' @14 '-13.7' @25 '-8.0' @36 '-5.7' @63 '*' 
+   ELSE IF (obs.gt.500)
+	 disp  '*' @14 '-13.8' @25 '-8.1' @36 '-5.7' @63 '*'
+   }
+ELSE IF (det.eq.2) {
+   IF (obs.lt.25)
+	 disp  '*' @14 '-17.2' @24 '-12.5' @35 '-10.2' @63 '*' 
+   ELSE IF (obs.lt.50)
+	 disp  '*' @14 '-18.9' @24 '-13.3' @35 '-10.7' @63 '*'
+   ELSE IF (obs.lt.100)
+	 disp  '*' @14 '-19.8' @24 '-13.7' @35 '-11.0' @63 '*'      
+   ELSE IF (obs.lt.250)
+	 disp  '*' @14 '-20.3' @24 '-14.0' @35 '-11.2' @63 '*' 
+   ELSE IF (obs.le.500)
+	 disp  '*' @14 '-20.5' @24 '-14.0' @35 '-11.2' @63 '*' 
+   ELSE IF (obs.gt.500)
+	 disp  '*' @14 '-20.7' @24 '-14.1' @35 '-11.3' @63 '*'
+   }
+ELSE IF (det.eq.3) {
+   IF (obs.lt.25)
+	 disp  '*' @14 '-22.5' @24 '-17.9' @35 '-15.6' @63 '*'
+   ELSE IF (obs.lt.50)
+	 disp  '*' @14 '-25.7' @24 '-19.8' @35 '-16.8' @63 '*'
+   ELSE IF (obs.lt.100)
+	 disp  '*' @14 '-27.4' @24 '-20.7' @35 '-17.5' @63 '*'      
+   ELSE IF (obs.lt.250)
+	 disp  '*' @14 '-28.4' @24 '-21.3' @35 '-18.0' @63 '*' 
+   ELSE IF (obs.le.500)
+	 disp  '*' @14 '-28.9' @24 '-21.5' @35 '-18.1' @63 '*' 
+   ELSE IF (obs.gt.500)
+	 disp  '*' @14 '-29.5' @24 '-21.8' @35 '-18.3' @63 '*'
+   }
+
+}
+
+IF (test.eq.3) {   ******  F-TEST OF UNIT ROOT W/ NO CONSTANT 
+   IF (obs.lt.25)
+	 disp  '*' @16 '7.88' @26 '5.18' @37 '4.12' @63 '*'
+   ELSE IF (obs.lt.50)
+	 disp  '*' @16 '7.06' @26 '4.86' @37 '3.94' @63 '*'
+   ELSE IF (obs.lt.100)
+	 disp  '*' @16 '6.70' @26 '4.71' @37 '3.86' @63 '*'      
+   ELSE IF (obs.lt.250)
+	 disp  '*' @16 '6.52' @26 '4.63' @37 '3.81' @63 '*' 
+   ELSE IF (obs.le.500)
+	 disp  '*' @16 '6.47' @26 '4.61' @37 '3.79' @63 '*'
+   ELSE IF (obs.gt.500)
+	 disp  '*' @16 '6.43' @26 '4.59' @37 '3.78' @63 '*'
+   }
+
+IF (test.eq.4) {   ******  F-TEST OF UNIT ROOT W/ NO TREND 
+   IF (obs.lt.25)
+	 disp '*' @15 '10.61' @26 '7.24' @37 '5.91' @63 '*'
+   ELSE IF (obs.lt.50)
+	 disp  '*' @16 '9.31' @26 '6.73' @37 '5.61' @63 '*'
+   ELSE IF (obs.lt.100)
+	 disp  '*' @16 '8.73' @26 '6.49' @37 '5.47' @63 '*'      
+   ELSE IF (obs.lt.250)
+	 disp '*' @16 '8.43' @26 '6.34' @37 '5.39' @63 '*' 
+   ELSE IF (obs.le.500)
+	 disp '*' @16 '8.34' @26 '6.30' @37 '5.36' @63 '*' 
+   ELSE IF (obs.gt.500)
+	 disp '*' @16 '8.27' @26 '6.25' @37 '5.34' @63 '*'
+   }
+
+END 
+*****************************************************************************
+
+
+************************ Augmented Dickey-Fuller Test ***********************
+*****************************************************************************
+PROCEDURE URADF series start end 
+TYPE series series
+TYPE integer start end
+
+OPTION CHOICE   DET        2    NONE CONSTANT TREND
+OPTION CHOICE   CRITERION  2    AIC BIC LBtest LMtest Reduction
+OPTION INTEGER  MAXLAGS    20
+OPTION REAL     SIGNIF    0.05 
+OPTION INTEGER  SCLAG      12
+
+LOCAL real    signf sig dfsig fiddle
+LOCAL integer lag maxlag sclags startl endl nobs
+LOCAL series  trend resids
+
+INQUIRE(series=series) startl>>start endl>>end
+COMPUTE nobs = endl - startl + 1
+compute maxlag = maxlags
+if (maxlag>(nobs/4))
+  compute maxlag = nobs/4   
+
+DISPLAY ' ' ; DISPLAY ' '
+DISPLAY '****************************************************************'
+DISPLAY '* TESTING THE NULL HYPOTHESIS OF A UNIT ROOT IN' %LABEL(series) $
+					  @63 '*'
+DISPLAY '*          Using data from' %datelabel(startl) 'to' $
+					  %datelabel(endl) @63 '*'
+DISPLAY '*    Choosing the optimal lag length for the ADF regression' @63 '*'
+DISPLAY '*     between 0 and ' maxlag ' lags.' @63 '*'
+if maxlag<>maxlags
+*     (MAXLAGS reduced due to insufficient # of observations.' @63 '*'
+IF (criterion.eq.1)
+	DISPLAY '*    using the AIC model selection criterion.' @63 '*'
+ELSE IF (criterion.eq.2)
+	DISPLAY '*    using the BIC model selection criterion.' @63 '*'
+ELSE IF (criterion.eq.3) {
+	DISPLAY '*    by adding lags until the Ljung-Box test fails to' @63 '*'
+	DISPLAY '*    reject no residual serial correlation at level' $
+					  @+0 #.### SIGNIF @-1 '.' @63 '*'
+	 }
+ELSE IF (criterion.eq.4){
+	DISPLAY '*    by adding lags until a Lagrange Multiplier test fails to' @63 '*'
+	DISPLAY '*    reject no residual serial correlation at level' $
+					  @+0 #.### SIGNIF @-1 '.' @63 '*'
+	 } 
+ELSE {
+	DISPLAY '*    by starting with' maxlag 'lagged differences and sequentially' $
+					  @63 '*'
+	DISPLAY '*    removing the last lag if insignificant at level' #.### $
+					  SIGNIF @63 '*'
+	DISPLAY '*    until a regression is run with a significant last' @63 '*'
+	DISPLAY '*    lagged difference, or zero lagged differences is reached.' $
+					  @63 '*'
+	 } 
+DISPLAY '****************************************************************'
+DISPLAY ' '
+
+SET delseries startl endl = series - series{1}
+
+		***************************************************************
+IF (criterion.lt.3) {               ****  Finds optimal lag length 
+									****    via AIC or BIC for 
+									****    constant/trend/none
+
+   IF (det.eq.1) {
+	   @SELECTUNI(number=maxlag,det=none) series startl endl 
+	   IF (criterion.eq.1) {
+		  IF (aicmin.gt.0) {
+			 LINREG(noprint) delseries startl endl resids
+			 #series{1} delseries{1 to aicmin}
+			 compute lag = aicmin
+			}
+		  ELSE {
+			 LINREG(noprint) delseries startl endl resids
+			 #series{1} 
+			 compute lag = 0 
+			}
+			   }
+		ELSE  { 
+		  IF (bicmin.gt.0) {
+				 LINREG(noprint) delseries startl endl resids
+				 #series{1} delseries{1 to bicmin}
+				 compute lag = bicmin 
+			}
+		  ELSE {
+			   LINREG(noprint) delseries startl endl resids
+			   #series{1} 
+				 compute lag = 0 
+			}
+			   }
+		}
+
+   ELSE IF (det.eq.2) {
+	  @SELECTUNI(number=maxlag,det=trend) series startl endl
+	  IF (criterion.eq.1) {
+		  IF (aicmin.gt.0) {
+			  LINREG(noprint) delseries startl endl resids  
+			  #series{1} constant delseries{1 to aicmin}
+			  compute lag = aicmin 
+			}
+		  ELSE {
+			  LINREG(noprint) delseries startl endl resids
+			  #series{1} constant
+			  compute lag = 0
+			  COMPUTE teststat=(%beta(1)-1.)/sqrt(%seesq*%xx(1,1))
+			}
+			   }
+	  ELSE  { 
+		  IF (bicmin.gt.0) {
+				 LINREG(noprint) delseries startl endl resids
+				 #series{1} constant delseries{1 to bicmin}
+				 compute lag = bicmin 
+			}
+		  ELSE {
+			   LINREG(noprint) delseries startl endl resids
+			   #series{1} constant 
+				 compute lag = 0 
+			}
+			   }
+	   }
+
+   ELSE IF (det.eq.3) {
+	  SET TREND = T
+	  @SELECTUNI(number=maxlag,det=trend) series startl endl  
+	  IF (criterion.eq.1) {
+		  IF (aicmin.gt.0) {
+				 LINREG(noprint) delseries startl endl resids
+				 #series{1} constant trend delseries{1 to aicmin}
+				 compute lag = aicmin 
+			}
+		  ELSE {
+			   LINREG(noprint) delseries startl endl resids
+			   #series{1} constant trend 
+				 compute lag = 0 
+			}
+			   }
+	  ELSE  { 
+		  IF (bicmin.gt.0) {
+				 LINREG(noprint) delseries startl endl resids
+				 #series{1}constant trend delseries{1 to bicmin}
+				 compute lag = bicmin 
+			}
+		  ELSE {
+			   LINREG(noprint) delseries startl endl resids
+			   #series{1} constant trend 
+				 compute lag = 0 
+			}
+			   }
+		  } 
+	}
+		   
+			********************************************************
+ELSE IF (criterion.eq.3).or.(criterion.eq.4) {    **** Find lag length via
+												  ****   LB and LM Tests
+
+IF %DEFINED(SIGNIF)
+	 compute signf = SIGNIF
+ELSE 
+	 compute signf = 0.05
+
+COMPUTE lag = 0; COMPUTE sig = 0.0 
+***
+IF (det.eq.2) {
+  WHILE (sig.lt.signf) {
+	 DISPLAY 'Adding lag' lag 
+	 IF (sclag.le.(lag+1))
+		COMPUTE sclags = fix(1.5*lag)
+	 ELSE
+		COMPUTE sclags = sclag
+	 IF (lag.gt.0)
+		   LINREG(noprint) delseries startl endl resids
+		   #series{1}  constant delseries{1 to lag}
+	 ELSE
+		LINREG(noprint) delseries startl endl resids
+		   #series{1}  constant  
+	 IF (criterion.eq.3) {
+		   @LB(lags=sclags,dfc=lag+1) resids startl endl 
+		   COMPUTE sig = lbsignif
+	  }
+	 ELSE IF (criterion.eq.4) {
+		IF (lag.gt.0) { 
+			@SCTEST(lags=sclags) series startl endl
+			#series{1}  constant delseries{1 to lag} 
+			COMPUTE sig = scsignif
+		  }
+		ELSE { 
+			@SCTEST(lags=sclags) series startl endl
+			#series{1}  constant  
+			COMPUTE sig = scsignif
+			}
+	   }
+
+	 IF (sig.gt.signf)
+		  IF (lag.gt.0) {     
+			LINREG(noprint) delseries startl endl resids
+			#series{1}  constant delseries{1 to lag}  
+			   }
+		  ELSE  {
+			LINREG(noprint) delseries startl endl resids
+			#series{1}  constant   
+			   }
+	 ELSE  
+	  COMPUTE lag = lag + 1 }
+   }
+}
+  
+***
+ELSE IF (det.eq.3) {
+SET TREND startl endl = T
+  WHILE (sig.lt.signf) {
+	 DISPLAY 'Adding lag' lag
+	 IF (sclag.le.(lag+1))
+		COMPUTE sclags = fix(1.5*lag)
+	 ELSE
+		COMPUTE sclags = sclag
+	 IF (lag.gt.0) 
+		LINREG(noprint) delseries startl endl resids
+		#series{1}  constant trend delseries{1 to lag}
+	 ELSE
+		LINREG(noprint) delseries startl endl resids
+		#series{1}  constant trend  
+	  IF (criterion.eq.3) {
+		@LB(lags=sclags,dfc=lag+1) resids startl endl  
+		COMPUTE sig = lbsignif
+	   }
+	 ELSE IF (criterion.eq.4) {
+		IF (lag.gt.0) {
+		  @SCTEST(lags=sclags) series startl endl
+		  #series{1}  constant trend delseries{1 to lag}  
+		  COMPUTE sig = scsignif
+		   }
+		ELSE {
+		  @SCTEST(lags=sclags) series startl endl
+		  #series{1}  constant trend   
+		  COMPUTE sig = scsignif 
+		  }
+	   }
+
+	 IF (sig.gt.signf)  
+		IF (lag.gt.0) {
+			Linreg(noprint) delseries startl endl resids
+			#series{1} constant trend delseries{1 to lag} 
+			  }
+		  ELSE {
+			LINREG(noprint) delseries startl endl resids
+			#series{1}  constant trend   
+			  } 
+	 ELSE  
+	  COMPUTE lag = lag + 1 }
+   }
+ }
+	 
+
+**
+ELSE IF (det.eq.1) {
+   WHILE (sig.lt.signf) {
+	 DISPLAY 'Adding lag' lag 
+	 IF (sclag.le.(lag+1))
+		COMPUTE sclags = fix(1.5*lag)
+	 ELSE
+		COMPUTE sclags = sclag
+	  IF (lag.gt.0)  
+		 LINREG(noprint) delseries startl endl resids
+		 #series{1} delseries{1 to lag}
+	  ELSE 
+		 LINREG(noprint) delseries startl endl resids
+		 #series{1} 
+	  IF (criterion.eq.3) {
+		 @LB(lags=sclags,dfc=lag+1) resids startl endl series
+		 COMPUTE sig = lbsignif
+	   }
+	  ELSE IF (criterion.eq.4) {
+		IF (lag.gt.0) { 
+		  @SCTEST(lags=sclags) series startl endl
+		  #series{1} delseries{1 to lag}
+		  COMPUTE sig = scsignif
+			}
+		ELSE { 
+		  @SCTEST(lags=sclags) series startl endl
+		  #series{1}  
+		  COMPUTE sig = scsignif
+			}
+	   }
+
+	 IF (sig.gt.signf)  
+	   IF (lag.gt.0) {
+		 Linreg(noprint) delseries startl endl resids
+		 #series{1} delseries{1 to lag} 
+			   }
+	   ELSE {
+		 Linreg(noprint) delseries startl endl resids
+		 #series{1} 
+			   }
+	 ELSE  
+	  COMPUTE lag = lag + 1 
+  }
+ }
+ **
+
+} ** END of crit = lmtest or lbtest 
+
+			  **************************************************
+ELSE  {                                        **** Find lag length via
+											   **** general-to-simple search
+  SET TREND startl endl = T
+  COMPUTE %signif = 1.0
+  COMPUTE lag = maxlag
+  WHILE (SIGNIF.lt.%signif) {
+   
+	 IF (det.eq.1) {
+
+		IF (lag.eq.0) { 
+		  LINREG(noprint) delseries
+		  #series{1}
+		  COMPUTE %signif = 0.0
+		  }
+		ELSE {
+		  LINREG(noprint) delseries
+		  # series{1} delseries{1 to lag}
+		  Exclude(noprint) ; #delseries{lag} 
+		  }
+		}
+
+	 ELSE IF (det.eq.2) {
+
+		IF (lag.eq.0) {
+		  LINREG(noprint) delseries
+		  #series{1} constant 
+		  COMPUTE %signif = 0.0
+		}
+		ELSE {
+		  LINREG(noprint) delseries
+		  # series{1}  constant delseries{1 to lag} 
+		  Exclude(noprint) ; #delseries{lag} 
+		}
+	  }
+
+	 ELSE   {
+	   IF (lag.eq.0) {
+		 LINREG(noprint)  delseries
+		 #series{1} constant trend
+		 COMPUTE %signif = 0.0
+		 }   
+	   ELSE {   
+		 LINREG(noprint)  delseries
+		 # series{1} constant trend delseries{1 to lag} 
+		 Exclude(noprint) ; #delseries{lag}
+		 }
+		}
+
+
+	 IF (lag.gt.0) {
+	   DISPLAY 'Significance of lag' @20 ## lag ':' ##.##### %signif
+	   IF (SIGNIF.lt.%signif)
+		  COMPUTE lag = lag - 1 
+	   }
+	 ELSE {
+	   DISPLAY ' '
+	   DISPLAY 'No lagged differences are significant in the ADF regression'
+	   }
+
+	 }     **** End WHILE
+	}
+
+COMPUTE teststatt=(%beta(1))/sqrt(%seesq*%xx(1,1))
+IF (lag.gt.0) {
+   SUMMARIZE(noprint)
+   # delseries{1 to lag}
+	 }
+IF (lag.gt.0)  
+   COMPUTE fiddle=1.0/(1.0-%sumlc)
+ELSE
+   COMPUTE fiddle=1.0
+
+COMPUTE teststatf=%nobs*fiddle*(%beta(1))
+
+	  DISPLAY ' '
+	  DISPLAY '****************************************************************'
+	  DISPLAY '* Augmented Dickey-Fuller t-test with' lag 'lags:' $
+		  @50 ####.#### teststatt @63 '*'
+	  IF (DET.eq.1)  
+		  @CV(det=none,test=ttest,numobs=%nobs)
+	  ELSE IF (DET.eq.2)
+		   @CV(det=constant,test=ttest,numobs=%nobs)
+	  ELSE 
+		  @CV(det=trend,test=ttest,numobs=%nobs)
+	  DISPLAY '*' @63 '*'
+	  DISPLAY '* Augmented Dickey-Fuller Z-test with' lag 'lags:' $
+		  @50 ####.#### teststatf @63 '*'
+	  IF (DET.eq.1)  
+		  @CV(det=none,test=ztest,numobs=%nobs)
+	  IF (DET.eq.2) {
+		  @CV(det=constant,test=ztest,numobs=%nobs)
+		  DISPLAY '*' @63 '*'
+		  DISPLAY '* Coefficient and T-Statistic on the Constant:' @63 '*'
+		  DISPLAY '*' @15 ###.##### %beta(2) @30 ###.#### $
+					  %beta(2)/sqrt(%seesq*%xx(2,2)) @63 '*'
+		}
+	  IF (DET.eq.3) {
+		  @CV(det=trend,test=ztest,numobs=%nobs)
+		  DISPLAY '*' @63 '*'
+		  DISPLAY '* Coefficient and T-Statistic on the Constant:' @63 '*'
+		  DISPLAY '*' @15 ###.##### %beta(2) @30 ###.#### $
+					  %beta(2)/sqrt(%seesq*%xx(2,2)) @63 '*'
+		  DISPLAY  '* Coefficient and T-Statistic on the Linear Trend:' @63 '*'
+		  DISPLAY '*' @15 ###.##### %beta(3) @30 ###.#### $
+					  %beta(3)/sqrt(%seesq*%xx(3,3)) @63 '*'
+		}
+	  IF (DET.eq.2) {
+		  DISPLAY '*' @63 '*'
+		  EXCLUDE(noprint) ; #series{1} constant 
+		  DISPLAY '* Joint test of a unit root and no constant:' $
+					  @50 ####.#### %CDSTAT @63 '*'
+		  @CV(test=fconst,numobs=%nobs)
+		  }
+	  IF (DET.eq.3) {
+		  DISPLAY '*' @63 '*'
+		  EXCLUDE(noprint) ; #series{1} trend 
+		  DISPLAY '* Joint test of a unit root and no linear trend' $
+					  @50 ####.#### %CDSTAT @63 '*'
+		  @CV(test=ftrend,numobs=%nobs)
+		  }
+	 DISPLAY '****************************************************************'
+	 DISPLAY
+
+
+END  URADF 
+

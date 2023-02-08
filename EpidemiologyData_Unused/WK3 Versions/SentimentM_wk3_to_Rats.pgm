@@ -1,0 +1,1 @@
+dedit(new) sentimentM.ratopen data SentimentM.wksstore(convert=wks,org=obs)saveclose data

@@ -1,0 +1,1 @@
+dedit(new) sentimentM.ratopen data SentimentM.csvstore(convert=prn,org=obs)saveclose data

@@ -1,0 +1,1 @@
+calendar 1980allocate 2001:1open data InflArts.csvdata(format=prn,org=obs) close dataextremum InflArtsWPset InflArtsWPIndex = InflArtsWP/%MAXIMUMextremum InflArtsNYTset InflArtsNYTIndex = InflArtsNYT/%MAXIMUMset InflArtsIndex = (InflArtsWPIndex+InflArtsNYTIndex)/2open copy inflarts.ratcopy(format=rats) / close copy

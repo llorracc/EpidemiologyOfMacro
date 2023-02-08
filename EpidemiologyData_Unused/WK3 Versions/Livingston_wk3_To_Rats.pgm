@@ -1,0 +1,1 @@
+dedit(new) livingston.ratopen data Livingston.wksstore(convert=wks,org=obs)saveclose data

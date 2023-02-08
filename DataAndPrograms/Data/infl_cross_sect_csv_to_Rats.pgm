@@ -1,0 +1,1 @@
+end clear memorycalendar 1978 1 12allocate 2001:12dedit(new) infl_cross_section.ratopen data infl_cross_section_curtin.csvstore(convert=prn,org=obs)saveclose data

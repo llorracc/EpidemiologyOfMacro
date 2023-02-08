@@ -1,0 +1,1 @@
+\begin{figure} \centerline{\includegraphics[scale=1.0]{:DataAndPrograms:Data:inflstd.eps}}%\epsfbox{:DataAndPrograms:Data:inflindex.eps}}% \centerline{\includegraphics[scale=0.7]{:DataAndPrograms:Data:inflstdsim.eps}}%\epsfbox{:DataAndPrograms:Data:inflindex.eps}} \caption{Standard Deviation of Inflation Expectations from Data and Simulations} \label{fig:inflstd}\end{figure}

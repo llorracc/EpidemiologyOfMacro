@@ -1,0 +1,1 @@
+dedit(new) livingston.ratopen data Livingston.csvstore(convert=prn,org=obs)saveclose data

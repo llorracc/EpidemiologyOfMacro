@@ -1,0 +1,103 @@
+end clear memory
+
+source Livingston_csv_to_Rats.pgm
+source SentimentM_csv_to_Rats.pgm
+source SentimentQ_csv_to_Rats.pgm
+source complex_dri_q_csv_to_Rats.pgm
+source complex_dri_m_csv_to_Rats.pgm
+source InflArts_csv_to_Rats.pgm
+source SPF_csv_To_Rats.pgm
+
+
+* Now store monthly data to monthly database
+
+end clear memory
+
+cal 1959 1 12
+allocate 2001:12
+
+dedit(new) complex_m.rat
+
+* Monthly michigan data
+open data SentimentM.rat
+store(convert=rats)
+
+* Survey of professional forecasters
+open data spf.rat
+store(convert=rats)
+* converts to monthly by filling each month of a quarter with the quarter's value
+
+* Inflation articles
+open data InflArts.rat
+store(convert=rats)
+
+* DRI data
+open data complex_dri_m.rat
+store(convert=rats)
+
+rename punew cpi
+rename puxx cor
+
+save
+
+open data complex_m.rat
+data(for=rat)
+close data
+
+source RATS_make_infl_m.pgm
+
+open copy complex_m.rat
+copy(for=rat)
+close copy
+
+
+end clear memory
+
+cal 1959 1 4
+allocate 2010:4
+
+dedit(new) complex_q.rat
+
+open data livingston.rat
+store(convert=rats)
+
+open data SentimentQ.rat
+store(convert=rats)
+
+* Get the median inflation index from the monthly dataset
+open data SentimentM.rat
+data(for=rats) / MICHINFMED 
+include michinfmed michinfmed / 
+close data
+
+* SPF 
+open data spf.rat
+store(convert=rats)
+
+* Inflation articles
+open data InflArts.rat
+store(convert=rats)
+
+* DRI data
+open data complex_dri_q.rat
+store(convert=rats)
+
+rename punew cpi
+rename puxx cor
+
+save
+
+open data complex_q.rat
+data(for=rat)
+close data
+
+source RATS_make_infl_q.pgm
+
+open copy complex_q.rat
+copy(for=rat)
+close copy
+
+
+save
+
+
