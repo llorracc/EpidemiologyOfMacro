@@ -1,0 +1,46 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: >-
+  Macroeconomic Expectations of Households and Professional
+  Forecasters
+message: Original files used in creation of published paper
+type: software
+authors:
+  - given-names: Christopher
+    family-names: Carroll
+    email: ccarroll@llorracc.org
+    affiliation: Johns Hopkins University
+    orcid: 'https://orcid.org/0000-0003-3732-9312'
+identifiers:
+  - type: url
+    value: 'https://github.com/llorracc/EpidemiologyOfMacro'
+    description: GitHub repo of paper and data
+abstract: >-
+  Replication archive for "Macroeconomic Expectations of
+  Households and Professional Forecasters",
+  https://doi.org/10.1162/00335530360535207
+
+
+  @article{carroll2003macroeconomic,
+    title={Macroeconomic expectations of households and professional forecasters},
+    author={Carroll, Christopher D},
+    journal={the Quarterly Journal of economics},
+    volume={118},
+    number={1},
+    pages={269--298},
+    year={2003},
+    publisher={MIT Press}
+  }
+keywords:
+  - Expectations
+  - Epidemiology
+  - Macroeconomics
+  - Inflation
+  - Sentiment
+  - Forecasts
+license: Apache-2.0
+commit: 2023-02-07-22-31
+version: Final
+date-released: '2023-02-07'

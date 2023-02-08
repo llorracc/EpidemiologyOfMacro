@@ -1,0 +1,44 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: >-
+  The Epidemiology of Macroeconomic Expectations
+message: Original files used in creation of published paper
+type: software
+authors:
+  - given-names: Christopher
+    family-names: Carroll
+    email: ccarroll@llorracc.org
+    affiliation: Johns Hopkins University
+    orcid: 'https://orcid.org/0000-0003-3732-9312'
+identifiers:
+  - type: url
+    value: 'https://github.com/llorracc/EpidemiologyOfMacro'
+    description: GitHub repo of paper and data
+abstract: >-
+  Replication archive for "The Epidemiology of Macroeconomic Expectations",
+  https://github.com/llorracc//EpidemiologyOfMacro/blob/main/EpidemiologySFI.pdf
+
+
+@INCOLLECTION{carroll:epidemicinflSFI,
+  author =	 {Carroll, Christopher D.},
+  title =	 {The {E}pidemiology of {M}acroeconomic {E}xpectations},
+  booktitle =	 {The Economy as an Evolving Complex System, III},
+  publisher =	 {Oxford University Press},
+  year =	 2006,
+  editor =	 {Blume, Larry and Durlauf, Steven},
+  url =		 {https://github.com/llorracc/EpidemiologyOfMacro/blob/main/EpidemiologySFI.pdf}
+}
+
+keywords:
+  - Expectations
+  - Epidemiology
+  - Macroeconomics
+  - Inflation
+  - Sentiment
+  - Forecasts
+license: Apache-2.0
+commit: 2023-02-07-22-31
+version: Final
+date-released: '2023-02-07'
